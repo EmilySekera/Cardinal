@@ -1,4 +1,17 @@
 
+CHANGES IN VERSION 2.4.0.9000 [2020-03-27]
+-----------------------------------
+BUG FIXES
+
+    o Fix bug in 'spatialFastmap()' when iterating over
+		FastMap components where
+		'iData(x)[,spatial$neighbors[[oa]]]' and
+		'iData(x)[,spatial$neighbors[[ob]]]' are stored
+		as a numeric vector instead of a matrix
+	o Fix bug in 'spatialShrunkenCentroids()' where
+		'if ( all(class==pred$class) )' causes error
+		due to NA values in 'class' or 'pred$class'
+
 CHANGES IN VERSION 2.3.18 [2019-10-27]
 -----------------------------------
 
