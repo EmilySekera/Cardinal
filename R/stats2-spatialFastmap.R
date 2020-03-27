@@ -96,10 +96,16 @@ setAs("SpatialFastmap", "SpatialFastmap2",
 		oa <- pivots[j,1]
 		ob <- pivots[j,2]
 		xa <- iData(x)[,spatial$neighbors[[oa]]]
+		if (class(xa) == 'numeric') {
+			xa <- as.matrix(xa)
+		}
 		attr(xa, "idx") <- oa
 		attr(xa, "offsets") <- spatial$offsets[[oa]]
 		attr(xa, "weights") <- spatial$weights[[oa]]
 		xb <- iData(x)[,spatial$neighbors[[ob]]]
+		if (class(xb) == 'numeric') {
+			xb <- as.matrix(xb)
+		}
 		attr(xb, "idx") <- ob
 		attr(xb, "offsets") <- spatial$offsets[[ob]]
 		attr(xb, "weights") <- spatial$weights[[ob]]
@@ -158,6 +164,9 @@ setAs("SpatialFastmap", "SpatialFastmap2",
 	}
 	while ( iter <= iter.max ) {
 		xa <- iData(x)[,spatial$neighbors[[oa]]]
+		if (class(xa) == 'numeric') {
+			xa <- as.matrix(xa)
+		}
 		attr(xa, "idx") <- oa
 		attr(xa, "offsets") <- spatial$offsets[[oa]]
 		attr(xa, "weights") <- spatial$weights[[oa]]
@@ -173,6 +182,9 @@ setAs("SpatialFastmap", "SpatialFastmap2",
 			return(structure(c(oa, ob), init=init))
 		ob <- cand
 		xb <- iData(x)[,spatial$neighbors[[ob]]]
+		if (class(xb) == 'numeric') {
+			xb <- as.matrix(xb)
+		}
 		attr(xb, "idx") <- ob
 		attr(xb, "offsets") <- spatial$offsets[[ob]]
 		attr(xb, "weights") <- spatial$weights[[ob]]
