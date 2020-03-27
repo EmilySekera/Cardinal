@@ -216,7 +216,18 @@ setAs("SpatialShrunkenCentroids", "SpatialShrunkenCentroids2",
 		pred <- .spatialShrunkenCentroids2_predict(x,
 			r=r, class=class, weights=weights, centers=fit$centers,
 			sd=fit$sd, priors=NULL, dist=dist, init=init, BPPARAM=BPPARAM)
-		if ( all(class==pred$class) )
+		compareClasses <- function(c1, c2) {
+			same <- all(c1==c2)
+			if (!is.na(same) & same==TRUE) {
+				return(TRUE)
+			} else if (is.na(same) | same==FALSE) {
+				return(FALSE)
+			}
+			#same <- (c1==c2)
+			#same <- (c1==c2) | (is.na(c1) & is.na(c2))
+			#ifelse(length(same[is.na(same)]) > 0, FALSE, TRUE)
+		}
+		if ( compareClasses(c1=class, c2=pred$class) )
 			break
 		class <- pred$class
 		init <- pred$init
@@ -297,7 +308,7 @@ setAs("SpatialShrunkenCentroids", "SpatialShrunkenCentroids2",
 	probability <- pfun(scores)
 	colnames(probability) <- colnames(centers)
 	# calculate and return new class assignments
-	class <- factor(apply(probability, 1, which.max),
+	class <- factor(apply(probability, 1, function(x) ifelse(length(x), which.max(x), NA)),
 		levels=seq_len(ncol(centers)), labels=colnames(centers))
 	list(scores=scores, probability=probability, class=class, init=init)
 }
