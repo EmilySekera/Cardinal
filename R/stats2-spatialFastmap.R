@@ -50,6 +50,7 @@ setAs("SpatialFastmap", "SpatialFastmap2",
 .spatialFastmap2 <- function(x, r, ncomp, method, metric, dist,
 							tol.dist, iter.max = 2, BPPARAM)
 {
+	init <- TRUE
 	wts <- spatialWeights(x, r=r, method=method,
 						dist=dist, BPPARAM=BPPARAM)
 	spatial <- list(r=r, weights=c(wts),
@@ -57,47 +58,54 @@ setAs("SpatialFastmap", "SpatialFastmap2",
 		offsets=attr(wts, "offsets"))
 	proj <- matrix(0, nrow=ncol(x), ncol=ncomp)
 	pivots <- matrix(NA_integer_, nrow=ncomp, ncol=2)
+	# suppress progress in inner parallel loop
+	progress <- getOption("Cardinal.progress")
+	options(Cardinal.progress=FALSE)
+	on.exit(options(Cardinal.progress=progress))
 	# spatially-aware distance functions
 	fun <- function(xbl, xa, xb) {
+		i <- attr(attr(xbl, "idx"), "centers")
 		d_ai <- .spatialDistance2(xbl, xa,
 			offsets=attr(xbl, "offsets"),
-			weights=attr(xbl, "weights"),
+			weights=attr(xbl, "params"),
 			ref.offsets=attr(xa, "offsets"),
 			ref.weights=attr(xa, "weights"),
 			neighbors=attr(xbl, "neighbors"),
-			metric=metric,
-			i=attr(xbl, "idx"),
-			j=attr(xa, "idx"),
-			proj=proj,
-			tol.dist=tol.dist)
+			metric=metric, i=i, j=attr(xa, "idx"),
+			proj=proj, tol.dist=tol.dist)
 		d_bi <- .spatialDistance2(xbl, xb,
 			offsets=attr(xbl, "offsets"),
-			weights=attr(xbl, "weights"),
+			weights=attr(xbl, "params"),
 			ref.offsets=attr(xb, "offsets"),
 			ref.weights=attr(xb, "weights"),
 			neighbors=attr(xbl, "neighbors"),
-			metric=metric,
-			i=attr(xbl, "idx"),
-			j=attr(xb, "idx"),
-			proj=proj,
-			tol.dist=tol.dist)
+			metric=metric, i=i, j=attr(xb, "idx"),
+			proj=proj, tol.dist=tol.dist)
 		(d_ai^2 + d_ab^2 - d_bi^2) / (2 * d_ab)
 	}
 	# iterate over FastMap components
 	for ( j in seq_len(ncomp) ) {
 		o_ab <- .findDistantObjects2(x, proj=proj, spatial=spatial,
 			metric=metric, dist=dist, tol.dist=tol.dist,
-			iter.max=iter.max, BPPARAM=BPPARAM)
+			init=init, iter.max=iter.max, BPPARAM=BPPARAM)
 		if ( any(is.na(o_ab)) )
 			break		
+		if ( !is.null(attr(o_ab, "init")) )
+			init <- attr(o_ab, "init")
 		pivots[j,] <- o_ab
 		oa <- pivots[j,1]
 		ob <- pivots[j,2]
 		xa <- iData(x)[,spatial$neighbors[[oa]]]
+		if (class(xa) == 'numeric') {
+			xa <- as.matrix(xa)
+		}
 		attr(xa, "idx") <- oa
 		attr(xa, "offsets") <- spatial$offsets[[oa]]
 		attr(xa, "weights") <- spatial$weights[[oa]]
 		xb <- iData(x)[,spatial$neighbors[[ob]]]
+		if (class(xb) == 'numeric') {
+			xb <- as.matrix(xb)
+		}
 		attr(xb, "idx") <- ob
 		attr(xb, "offsets") <- spatial$offsets[[ob]]
 		attr(xb, "weights") <- spatial$weights[[ob]]
@@ -110,9 +118,8 @@ setAs("SpatialFastmap", "SpatialFastmap2",
 			metric=metric, i=oa, j=ob,
 			proj=proj, tol.dist=tol.dist)
 		comp_j <- spatialApply(x, .r=spatial$r, .fun=fun, xa=xa, xb=xb,
-			.simplify=.unlist_once, .verbose=FALSE, .dist=dist,
-			.params=list(weights=spatial$weights),
-			view="chunk", BPPARAM=BPPARAM)
+			.blocks=TRUE, .simplify=.unlist_and_reorder, .dist=dist,
+			.init=init, .params=spatial$weights, BPPARAM=BPPARAM)
 		.message(".", appendLF=FALSE)
 		proj[,j] <- comp_j
 	}
@@ -129,7 +136,7 @@ setAs("SpatialFastmap", "SpatialFastmap2",
 				}
 			}, numeric(1))
 		}))
-	}, .simplify=do_rbind, .verbose=FALSE, view="chunk", BPPARAM=BPPARAM)
+	}, .blocks=TRUE, .simplify=do_rbind, BPPARAM=BPPARAM)
 	colnames(proj) <- paste("FC", 1:ncomp, sep="")
 	colnames(corr) <- paste("FC", 1:ncomp, sep="")
 	pivots <- as.data.frame(pivots)
@@ -139,54 +146,58 @@ setAs("SpatialFastmap", "SpatialFastmap2",
 }
 
 .findDistantObjects2 <- function(x, proj, spatial, metric, dist,
-							tol.dist, iter.max, BPPARAM)
+							tol.dist, init, iter.max, BPPARAM)
 {
 	iter <- 1
 	oa <- 1
 	ob <- NULL
 	fun <- function(xbl, xj) {
+		i <- attr(attr(xbl, "idx"), "centers")
 		.spatialDistance2(xbl, xj,
 			offsets=attr(xbl, "offsets"),
-			weights=attr(xbl, "weights"),
+			weights=attr(xbl, "params"),
 			ref.offsets=attr(xj, "offsets"),
 			ref.weights=attr(xj, "weights"),
 			neighbors=attr(xbl, "neighbors"),
-			metric=metric,
-			i=attr(xbl, "idx"),
-			j=attr(xj, "idx"),
-			proj=proj,
-			tol.dist=tol.dist)
+			metric=metric, i=i, j=attr(xj, "idx"),
+			proj=proj, tol.dist=tol.dist)
 	}
 	while ( iter <= iter.max ) {
 		xa <- iData(x)[,spatial$neighbors[[oa]]]
+		if (class(xa) == 'numeric') {
+			xa <- as.matrix(xa)
+		}
 		attr(xa, "idx") <- oa
 		attr(xa, "offsets") <- spatial$offsets[[oa]]
 		attr(xa, "weights") <- spatial$weights[[oa]]
 		dists <- spatialApply(x, .r=spatial$r, .fun=fun, xj=xa,
-			.simplify=.unlist_once, .verbose=FALSE, .dist=dist,
-			.params=list(weights=spatial$weights),
-			view="chunk", BPPARAM=BPPARAM)
+			.blocks=TRUE, .simplify=.unlist_and_reorder, .dist=dist,
+			.init=init, .params=spatial$weights, BPPARAM=BPPARAM)
+		if ( !is.null(attr(dists, "init")) )
+			init <- attr(dists, "init")
 		cand <- which.max(dists)
 		if ( dists[cand] == 0 )
-			return(c(NA, NA))
+			return(structure(c(NA, NA), init=init))
 		if ( isTRUE(ob == cand) )
-			return(c(oa, ob))
+			return(structure(c(oa, ob), init=init))
 		ob <- cand
 		xb <- iData(x)[,spatial$neighbors[[ob]]]
+		if (class(xb) == 'numeric') {
+			xb <- as.matrix(xb)
+		}
 		attr(xb, "idx") <- ob
 		attr(xb, "offsets") <- spatial$offsets[[ob]]
 		attr(xb, "weights") <- spatial$weights[[ob]]
 		dists <- spatialApply(x, .r=spatial$r, .fun=fun, xj=xb,
-			.simplify=.unlist_once, .verbose=FALSE, .dist=dist,
-			.params=list(weights=spatial$weights),
-			view="chunk", BPPARAM=BPPARAM)
+			.blocks=TRUE, .simplify=.unlist_and_reorder, .dist=dist,
+			.init=init, .params=spatial$weights, BPPARAM=BPPARAM)
 		oa <- which.max(dists)
 		d <- dists[oa]
 		if ( dists[oa] == 0 )
-			return(c(NA, NA))
+			return(structure(c(NA, NA), init=init))
 		iter <- iter + 1
 	}
-	c(oa, ob)
+	structure(c(oa, ob), init=init)
 }
 
 
