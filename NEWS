@@ -8,7 +8,7 @@ BUG FIXES
 		'iData(x)[,spatial$neighbors[[oa]]]' and
 		'iData(x)[,spatial$neighbors[[ob]]]' are stored
 		as a numeric vector instead of a matrix
-	o Fix bug in 'spatialShrunkenCentroids()' where
+    o Fix bug in 'spatialShrunkenCentroids()' where
 		'if ( all(class==pred$class) )' causes error
 		due to NA values in 'class' or 'pred$class'
 
